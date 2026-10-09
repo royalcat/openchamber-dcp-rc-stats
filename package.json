@@ -24,7 +24,7 @@
             "statusSection": {
                 "entry": "panel/index.html",
                 "title": "DCP",
-                "height": 140
+                "height": 84
             },
             "service": {
                 "entry": "service/main.js",

@@ -55,7 +55,7 @@ html[data-oc-surface="panel"] body {
 
 .dcp-title {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -66,7 +66,7 @@ html[data-oc-surface="panel"] body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .dcp-actions {
@@ -107,7 +107,7 @@ html[data-oc-surface="panel"] body {
   gap: 8px;
   margin-bottom: 4px;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -134,8 +134,8 @@ html[data-oc-surface="panel"] body {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  min-height: 24px;
-  padding: 3px 0;
+  min-height: 28px;
+  padding: 4px 0;
 }
 
 .dcp-metric + .dcp-metric {
@@ -146,7 +146,7 @@ html[data-oc-surface="panel"] body {
   flex: 0 0 auto;
   white-space: nowrap;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .dcp-metric-value {
@@ -154,7 +154,7 @@ html[data-oc-surface="panel"] body {
   min-width: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   text-align: right;
 }
 
@@ -193,7 +193,7 @@ html[data-oc-surface="panel"] body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -203,7 +203,7 @@ html[data-oc-surface="panel"] body {
   background: color-mix(in srgb, var(--primary, var(--oc-primary, currentColor)) 14%, transparent);
   color: var(--primary-text, var(--primary, var(--oc-primary, currentColor)));
   padding: 1px 8px;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -212,7 +212,7 @@ html[data-oc-surface="panel"] body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .dcp-block-sub code {
@@ -227,7 +227,7 @@ html[data-oc-surface="panel"] body {
   background: color-mix(in srgb, var(--surface-elevated, var(--oc-elevated, transparent)) 60%, transparent);
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
   padding: 10px 12px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -239,10 +239,11 @@ html[data-oc-surface="panel"] body {
 /* ---------- status section (compact) ---------- */
 
 .dcp-status {
+  height: auto;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
 }
 
 .dcp-status-main {
@@ -255,7 +256,7 @@ html[data-oc-surface="panel"] body {
 
 .dcp-status-saved {
   overflow-wrap: anywhere;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -266,14 +267,14 @@ html[data-oc-surface="panel"] body {
   background: color-mix(in srgb, var(--primary, var(--oc-primary, currentColor)) 14%, transparent);
   color: var(--primary-text, var(--primary, var(--oc-primary, currentColor)));
   padding: 1px 8px;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
 .dcp-status-sub {
   overflow-wrap: anywhere;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .dcp-status-error {
