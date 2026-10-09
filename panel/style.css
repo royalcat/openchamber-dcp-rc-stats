@@ -143,17 +143,16 @@ html[data-oc-surface="panel"] body {
 }
 
 .dcp-metric-label {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
   white-space: nowrap;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
   font-size: 0.75rem;
 }
 
 .dcp-metric-value {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.75rem;
   text-align: right;
@@ -248,16 +247,15 @@ html[data-oc-surface="panel"] body {
 
 .dcp-status-main {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
   min-width: 0;
 }
 
 .dcp-status-saved {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -273,9 +271,7 @@ html[data-oc-surface="panel"] body {
 }
 
 .dcp-status-sub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--surface-muted-foreground, var(--oc-muted, gray));
   font-size: 0.75rem;
 }
