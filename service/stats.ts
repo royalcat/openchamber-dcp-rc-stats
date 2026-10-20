@@ -17,6 +17,7 @@
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
+import type { ProjectStatus } from "./config"
 
 // ------------------------------------------------------------------ types
 
@@ -48,6 +49,8 @@ export interface SessionReport {
     found: true
     sessionName: string | null
     lastUpdated: string | null
+    /** Persisted `/dcp manual` override, or null before DCP has written state. */
+    manualMode: boolean | null
     tokensIn: number
     tokensOut: number
     durationMs: number
@@ -72,6 +75,8 @@ export interface StatsPayload {
     reason?: "storage-missing"
     session: SessionReport | null
     allTime: AllTime | null
+    /** Effective project mode; absent on older services and when no directory is known. */
+    project?: ProjectStatus | null
 }
 
 // ------------------------------------------------------------- value guards
@@ -216,6 +221,7 @@ export function buildSessionReport(state: unknown, sessionId: string): SessionRe
         found: true,
         sessionName: typeof state.sessionName === "string" ? state.sessionName : null,
         lastUpdated: typeof state.lastUpdated === "string" ? state.lastUpdated : null,
+        manualMode: typeof state.manualMode === "boolean" ? state.manualMode : null,
         tokensIn: toCount(stats.totalPruneTokens),
         tokensOut,
         durationMs,

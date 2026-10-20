@@ -38,6 +38,10 @@ html[data-oc-surface="panel"] body {
   box-sizing: border-box;
 }
 
+.dcp [hidden] {
+  display: none !important;
+}
+
 /* ---------- header ---------- */
 
 .dcp-header {
@@ -234,6 +238,72 @@ html[data-oc-surface="panel"] body {
 .dcp-hint code {
   font-family: var(--font-mono, ui-monospace, monospace);
   word-break: break-all;
+}
+
+/* ---------- project mode ---------- */
+
+.dcp-project-badge {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dcp-project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: calc(var(--radius, 9px) + 2px);
+  background: color-mix(in srgb, var(--surface-elevated, var(--oc-elevated, transparent)) 60%, transparent);
+  padding: 9px 10px;
+}
+
+.dcp-project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dcp-project-desc {
+  color: var(--surface-muted-foreground, var(--oc-muted, gray));
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.dcp-project-hint {
+  color: var(--surface-muted-foreground, var(--oc-muted, gray));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.71875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.dcp-project-session,
+.dcp-project-notice {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.dcp-project-session {
+  color: var(--warning-text, var(--warning, currentColor));
+}
+
+.dcp-project-notice {
+  color: var(--success-text, var(--success, currentColor));
+}
+
+.dcp-project-error {
+  color: var(--warning-text, var(--warning, currentColor));
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.dcp-project-actions {
+  display: flex;
+  padding-top: 2px;
 }
 
 /* ---------- status section (compact) ---------- */

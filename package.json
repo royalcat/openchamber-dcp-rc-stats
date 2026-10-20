@@ -1,10 +1,10 @@
 {
     "name": "openchamber-dcp-rc-stats",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "private": true,
     "type": "module",
     "license": "AGPL-3.0-or-later",
-    "description": "OpenChamber extension: DCP RC compression stats in a side panel",
+    "description": "OpenChamber extension: DCP RC compression stats and project mode",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/royalcat/openchamber-dcp-rc-stats.git"
@@ -41,7 +41,8 @@
         "smoke": "node scripts/smoke.mjs"
     },
     "dependencies": {
-        "@openchamber/sdk": "^2.1.0"
+        "@openchamber/sdk": "^2.1.0",
+        "jsonc-parser": "^3.3.1"
     },
     "devDependencies": {
         "@types/node": "^25.5.0",

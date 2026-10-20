@@ -153,6 +153,7 @@ test("buildSessionReport mirrors buildStatsReport", () => {
     assert.equal(report.id, "ses_test")
     assert.equal(report.sessionName, "my session")
     assert.equal(report.lastUpdated, "2026-10-01T00:00:00.000Z")
+    assert.equal(report.manualMode, false)
     assert.equal(report.tokensIn, 5000)
     assert.equal(report.tokensOut, 100) // only the active block
     assert.equal(report.durationMs, 500) // only the active block

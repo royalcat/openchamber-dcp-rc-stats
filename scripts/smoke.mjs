@@ -1,8 +1,8 @@
 /**
  * Smoke test for the built service.
  *
- * Starts `service/main.js` against a temporary storage directory, then checks
- * the auth gate, `/health` and `/stats`.
+ * Starts `service/main.js` against temporary storage and project directories,
+ * then checks the auth gate, `/health`, `/stats` and `/project-mode`.
  *
  * Run after `bun run build`:  node scripts/smoke.mjs
  */
@@ -86,6 +86,8 @@ const fixture = {
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), "dcp-stats-smoke-"))
 await fs.writeFile(path.join(dir, `${sessionId}.json`), JSON.stringify(fixture))
+const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "dcp-stats-project-"))
+const globalConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "dcp-stats-global-"))
 
 const token = "smoke-token"
 const port = await freePort()
@@ -95,6 +97,7 @@ const child = spawn(process.execPath, [serviceEntry], {
         OPENCHAMBER_SERVICE_PORT: String(port),
         OPENCHAMBER_SERVICE_TOKEN: token,
         OPENCHAMBER_DCP_STORAGE_DIR: dir,
+        OPENCHAMBER_DCP_GLOBAL_CONFIG_DIR: globalConfigDir,
     },
     stdio: ["ignore", "pipe", "pipe"],
 })
@@ -145,8 +148,59 @@ try {
     assert.equal(body.allTime.sessions, 1)
     assert.equal(body.allTime.usage.calls, 1)
 
-    console.log("smoke ok: health, auth gate, session report and all-time totals")
+    const projectStats = await fetch(
+        `${base}/stats?session=${sessionId}&directory=${encodeURIComponent(projectDir)}`,
+        { headers: { authorization: `Bearer ${token}` } },
+    )
+    assert.equal(projectStats.status, 200)
+    const projectBody = await projectStats.json()
+    assert.equal(projectBody.project.mode, "automatic")
+    assert.equal(projectBody.project.source, "default")
+
+    const toggle = await fetch(`${base}/project-mode`, {
+        method: "POST",
+        headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+        },
+        body: JSON.stringify({ directory: projectDir, mode: "passive" }),
+    })
+    assert.equal(toggle.status, 200)
+    const toggled = await toggle.json()
+    assert.equal(toggled.ok, true)
+    assert.equal(toggled.project.mode, "passive")
+    assert.equal(toggled.project.projectConfigPath, path.join(projectDir, ".opencode", "dcp-rc.jsonc"))
+
+    const configText = await fs.readFile(
+        path.join(projectDir, ".opencode", "dcp-rc.jsonc"),
+        "utf-8",
+    )
+    assert.match(configText, /"manualMode"/)
+    assert.match(configText, /"allowCompressTool": true/)
+
+    const refreshed = await fetch(
+        `${base}/stats?session=${sessionId}&directory=${encodeURIComponent(projectDir)}`,
+        { headers: { authorization: `Bearer ${token}` } },
+    )
+    assert.equal(refreshed.status, 200)
+    assert.equal((await refreshed.json()).project.mode, "passive")
+
+    const badMode = await fetch(`${base}/project-mode`, {
+        method: "POST",
+        headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+        },
+        body: JSON.stringify({ directory: projectDir, mode: "off" }),
+    })
+    assert.equal(badMode.status, 400)
+
+    console.log("smoke ok: health, auth gate, stats, project status and project-mode toggle")
 } finally {
     child.kill()
-    await fs.rm(dir, { recursive: true, force: true })
+    await Promise.all([
+        fs.rm(dir, { recursive: true, force: true }),
+        fs.rm(projectDir, { recursive: true, force: true }),
+        fs.rm(globalConfigDir, { recursive: true, force: true }),
+    ])
 }

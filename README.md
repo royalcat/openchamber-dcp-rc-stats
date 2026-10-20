@@ -3,7 +3,9 @@
 An OpenChamber extension that shows what
 [DCP RC](https://github.com/royalcat/opencode-dcp-rc) is saving you: the
 compression stats of the open session, the active compressions, and all-time
-totals — in the extensions rail panel and in the chat's Work Status panel.
+totals — in the extensions rail panel and in the chat's Work Status panel. It
+also reports the project's DCP mode and can switch that project between
+automatic and passive compression.
 
 ```
 Session                                  All-time
@@ -40,12 +42,12 @@ is available in the chat's Work Status panel section list.
 
 Git installs update themselves: bump `version` in `package.json`, rebuild, and
 push; OpenChamber offers the update the next time Settings → Extensions is
-opened. Add `#v0.1.0` or `#main` to the URL to pin a tag or branch.
+opened. Add `#v0.2.0` or `#main` to the URL to pin a tag or branch.
 
 To hack on the extension, add the absolute path of a checkout instead: a folder
 install runs straight from that folder and never updates on its own.
 
-## What it reads
+## What it reads and writes
 
 The extension's local service reads the state files DCP RC persists per
 session:
@@ -60,28 +62,53 @@ compression time, pruned messages and tools, hidden summary request usage, and
 all-time totals. No OpenCode or OpenChamber API is called, so the panel works
 on instances protected with a UI password.
 
+It also reads the DCP config layers to report the project mode:
+
+```
+~/.config/opencode/dcp-rc.jsonc|json     global
+$OPENCODE_CONFIG_DIR/dcp-rc.jsonc|json   custom OpenCode config directory
+<nearest .opencode>/dcp-rc.jsonc|json    project
+```
+
+The **Make passive** button writes the project's `.opencode/dcp-rc.jsonc`
+(creating the file and directory when needed) with the plugin's passive recipe:
+`manualMode.enabled: true`, `automaticStrategies: false`, and
+`allowCompressTool: true`. **Enable automatic** writes the opposite values.
+Existing comments and unrelated keys are preserved with `jsonc-parser`.
+`enabled: false` is shown as **Off**, but the toggle does not write it.
+
 The service is a small Node process on `127.0.0.1` started by OpenChamber on
-first use; the panel reaches it only through the host's loopback proxy. It
-reads the DCP storage directory and nothing else. Parsed files are cached by
-mtime, so the all-time scan stays cheap after the first request.
+first use; the panel reaches it only through the host's loopback proxy. Parsed
+state files are cached by mtime, so the all-time scan stays cheap after the
+first request.
 
 ## Surfaces
 
-- **Rail panel** — the full report, refreshed every four seconds while
-  visible, on session change, and when a turn finishes.
+- **Rail panel** — the full report plus a Project section with the mode badge
+  (Automatic, Passive, Manual, Off), the config source, and the mode button.
+  Refreshed every four seconds while visible, on session change, and when a
+  turn finishes.
 - **Work Status section** — a compact card (saved tokens, ratio, block count,
   all-time total) that you can hide or move in the Work Status panel like the
-  built-in sections.
+  built-in sections. It prefixes `passive`, `manual`, or `disabled` when the
+  project mode is not automatic.
 
 ## Limitations
 
-- Read-only. Toggling manual mode or asking DCP to compress from the panel
-  would need the plugin's RPC, which is not reachable from extensions.
+- DCP reads its config once at plugin startup, and each session persists its
+  own `/dcp manual` value. The mode button changes the project default for new
+  sessions after OpenCode restarts; an existing session keeps its persisted
+  override. The panel shows that override and which `/dcp manual` command
+  applies the new project mode now, but it cannot invoke the plugin's RPC
+  itself.
 - The context breakdown (system / user / assistant / tools) is computed from
   live messages inside OpenCode and is not persisted; it is not shown.
-- The storage directory is resolved from `$HOME`. If OpenCode runs with a
-  custom `XDG_DATA_HOME`, the service cannot see it and the panel says the
-  state folder was not found.
+- The storage directory and global config directory are resolved from
+  `$HOME`. A custom `XDG_DATA_HOME` / `XDG_CONFIG_HOME`, or an
+  `$OPENCODE_CONFIG_DIR` that the host process does not pass to the service,
+  can make the panel miss the corresponding files. `OPENCHAMBER_DCP_STORAGE_DIR`
+  and `OPENCHAMBER_DCP_GLOBAL_CONFIG_DIR` override them when running the
+  service manually.
 
 ## Development
 
@@ -97,8 +124,9 @@ OpenChamber never compiles an extension: `panel/main.js` and `service/main.js`
 are built and committed. Rebuild and commit them with every change.
 
 The aggregation in `service/stats.ts` mirrors the plugin's
-`buildStatsReport` / `loadAllSessionStats`; the unit tests pin the rules and
-the layout of the payload the panel consumes.
+`buildStatsReport` / `loadAllSessionStats`; `service/config.ts` mirrors the
+plugin's config layers and edits project JSONC without dropping comments. The
+unit tests pin both, plus the layout of the payload the panel consumes.
 
 ## License
 

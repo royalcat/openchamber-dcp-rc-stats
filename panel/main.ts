@@ -11,8 +11,9 @@
 
 import { connectHost, HostRequestError } from "@openchamber/sdk"
 import type { HostReadyContext, SessionSnapshot } from "@openchamber/sdk"
-import { applyHostReady, mountBanner, mountButton } from "@openchamber/sdk/ui"
-import type { BannerHandle, ButtonHandle } from "@openchamber/sdk/ui"
+import { applyHostReady, mountBadge, mountBanner, mountButton } from "@openchamber/sdk/ui"
+import type { BadgeHandle, BannerHandle, ButtonHandle } from "@openchamber/sdk/ui"
+import type { ProjectStatus } from "../service/config"
 import type { ActiveBlock, AllTime, SessionReport, StatsPayload } from "../service/stats"
 
 const POLL_MS = 4000
@@ -40,8 +41,13 @@ let mounted = false
 let surface: "panel" | "status" = "panel"
 let sessionId: string | null = null
 let sessionTitle = ""
+let projectDirectory: string | null = null
+let directoryWired = false
 let payload: StatsPayload | null = null
 let notice: Notice | null = null
+let projectNotice: string | null = null
+let projectActionError: string | null = null
+let projectBusy = false
 let pollTimer: number | null = null
 let fetchSeq = 0
 let lastStatusHeight = -1
@@ -49,6 +55,15 @@ let lastStatusHeight = -1
 let refs: {
     subtitle: HTMLElement
     notice: HTMLElement
+    projectSection: HTMLElement
+    projectName: HTMLElement
+    projectDescription: HTMLElement
+    projectHint: HTMLElement
+    projectSession: HTMLElement
+    projectNotice: HTMLElement
+    projectError: HTMLElement
+    projectAction: ButtonHandle
+    projectBadge: BadgeHandle
     sessionMeta: HTMLElement
     sessionMetrics: HTMLElement
     blocks: HTMLElement
@@ -101,6 +116,40 @@ function mountPanel(): void {
     const noticeEl = el("div", "dcp-notice")
     const body = el("div", "dcp-body")
 
+    const projectSection = el("section", "dcp-section dcp-project")
+    const projectHeader = el("div", "dcp-section-header")
+    const projectBadgeSlot = el("span", "dcp-project-badge")
+    projectHeader.append(el("span", undefined, "Project"), projectBadgeSlot)
+    const projectCard = el("div", "dcp-project-card")
+    const projectName = el("div", "dcp-project-name", "")
+    const projectDescription = el("div", "dcp-project-desc", "")
+    const projectHint = el("div", "dcp-project-hint", "")
+    const projectSessionEl = el("div", "dcp-project-session")
+    const projectNoticeEl = el("div", "dcp-project-notice")
+    const projectErrorEl = el("div", "dcp-project-error")
+    const projectActions = el("div", "dcp-project-actions")
+    const projectAction = mountButton(projectActions, {
+        label: "Make passive",
+        variant: "outline",
+        size: "xs",
+        onClick: () => void toggleProjectMode(),
+    })
+    projectCard.append(
+        projectName,
+        projectDescription,
+        projectHint,
+        projectSessionEl,
+        projectNoticeEl,
+        projectErrorEl,
+        projectActions,
+    )
+    projectSection.hidden = true
+    projectSection.append(projectHeader, projectCard)
+    const projectBadge = mountBadge(projectBadgeSlot, {
+        label: "Automatic",
+        tone: "success",
+    })
+
     const sessionSection = el("section", "dcp-section")
     const sessionHeader = el("div", "dcp-section-header")
     const sessionMeta = el("span", "dcp-section-meta", "")
@@ -117,13 +166,22 @@ function mountPanel(): void {
     const allTimeHint = el("div", "dcp-hint")
     allTimeSection.append(allTimeHeader, allTimeMetrics, allTimeHint)
 
-    body.append(sessionSection, allTimeSection)
+    body.append(projectSection, sessionSection, allTimeSection)
     panel.append(header, noticeEl, body)
     root.replaceChildren(panel)
 
     refs = {
         subtitle,
         notice: noticeEl,
+        projectSection,
+        projectName,
+        projectDescription,
+        projectHint,
+        projectSession: projectSessionEl,
+        projectNotice: projectNoticeEl,
+        projectError: projectErrorEl,
+        projectAction,
+        projectBadge,
         sessionMeta,
         sessionMetrics,
         blocks,
@@ -155,6 +213,7 @@ async function refreshStats(): Promise<void> {
     try {
         const query: Record<string, string> = {}
         if (sessionId) query.session = sessionId
+        if (projectDirectory) query.directory = projectDirectory
         const result = await host.serviceRequest({ method: "GET", path: "/stats", query })
         if (seq !== fetchSeq) return
         if (result.status !== 200) {
@@ -227,6 +286,64 @@ function applySession(session: SessionSnapshot | null): void {
     if (changed) void refreshStats()
 }
 
+function applyDirectory(directory: string | null): void {
+    const next = directory || null
+    if (next === projectDirectory) return
+    projectDirectory = next
+    projectNotice = null
+    projectActionError = null
+    void refreshStats()
+}
+
+async function toggleProjectMode(): Promise<void> {
+    if (!refs || !projectDirectory || projectBusy) return
+    const project = payload?.project ?? null
+    const next =
+        project?.mode === "off" || project?.mode === "passive" || project?.mode === "manual"
+            ? "automatic"
+            : "passive"
+
+    projectNotice = null
+    projectActionError = null
+    projectBusy = true
+    refs.projectAction.update({ loading: true })
+    try {
+        const result = await host.serviceRequest({
+            method: "POST",
+            path: "/project-mode",
+            body: JSON.stringify({ directory: projectDirectory, mode: next }),
+        })
+        const body = JSON.parse(result.body) as {
+            ok?: boolean
+            project?: ProjectStatus
+            error?: string
+        }
+        if (result.status !== 200 || !body.project) {
+            throw new Error(body.error || `project-mode service responded with HTTP ${result.status}`)
+        }
+        if (payload) payload.project = body.project
+        projectNotice = `Saved. New sessions use ${body.project.mode} mode after OpenCode restarts.`
+        void host
+            .toast({
+                kind: "success",
+                message: `DCP project mode saved (${body.project.mode}). New sessions use it after OpenCode restarts.`,
+            })
+            .catch(() => {})
+    } catch (error) {
+        projectActionError = error instanceof Error ? error.message : String(error)
+        void host
+            .toast({
+                kind: "error",
+                message: `Could not save the DCP project mode: ${projectActionError}`,
+            })
+            .catch(() => {})
+    } finally {
+        projectBusy = false
+        refs.projectAction.update({ loading: false })
+        render()
+    }
+}
+
 // -------------------------------------------------------------------- render
 
 function render(): void {
@@ -242,13 +359,159 @@ function render(): void {
     const session = payload?.session ?? null
     const allTime = payload?.allTime ?? null
 
-    refs.sessionMeta.textContent = session ? formatUpdated(session.lastUpdated) : ""
+    renderProject()
+    const meta = [session ? formatUpdated(session.lastUpdated) : ""]
+    const override = sessionModeOverride(session, payload?.project ?? null)
+    if (override) meta.push(override)
+    refs.sessionMeta.textContent = meta.filter(Boolean).join(" · ")
     renderMetrics(refs.sessionMetrics, session ? sessionRows(session) : [])
     renderBlocks(refs.blocks, session?.blocks ?? [])
     setHint(refs.sessionHint, sessionHintContent(session))
 
     renderMetrics(refs.allTimeMetrics, allTime ? allTimeRows(allTime) : [])
     setHint(refs.allTimeHint, allTimeHintContent(allTime))
+}
+
+function renderProject(): void {
+    if (!refs) return
+    if (!projectDirectory) {
+        refs.projectSection.hidden = true
+        return
+    }
+
+    refs.projectSection.hidden = false
+    refs.projectName.textContent = projectLabel(projectDirectory)
+    refs.projectNotice.hidden = !projectNotice
+    refs.projectNotice.textContent = projectNotice ?? ""
+
+    const project = payload?.project ?? null
+    if (!project) {
+        refs.projectBadge.update({ label: "…", tone: "neutral" })
+        refs.projectDescription.textContent = notice
+            ? "Project mode unavailable."
+            : "Reading project config…"
+        refs.projectHint.textContent = projectDirectory
+        refs.projectSession.hidden = true
+        refs.projectSession.textContent = ""
+        refs.projectError.hidden = true
+        refs.projectError.textContent = ""
+        refs.projectAction.update({ label: "Make passive", disabled: true, loading: projectBusy })
+        return
+    }
+
+    refs.projectBadge.update({
+        label: modeLabel(project.mode),
+        tone: modeTone(project.mode),
+    })
+    refs.projectDescription.textContent = modeDescription(project)
+    refs.projectHint.textContent = modeHint(project)
+    const sessionNotice = projectSessionNotice(payload?.session ?? null, project)
+    refs.projectSession.hidden = !sessionNotice
+    refs.projectSession.textContent = sessionNotice
+
+    const error = projectActionError || project.error
+    refs.projectError.hidden = !error
+    refs.projectError.textContent = error ?? ""
+    refs.projectAction.update({
+        label:
+            project.mode === "automatic" || project.mode === "manual"
+                ? "Make passive"
+                : "Enable automatic",
+        disabled: Boolean(project.projectConfigError) || projectBusy,
+        loading: projectBusy,
+    })
+}
+
+function modeLabel(mode: ProjectStatus["mode"]): string {
+    switch (mode) {
+        case "off":
+            return "Off"
+        case "passive":
+            return "Passive"
+        case "manual":
+            return "Manual"
+        default:
+            return "Automatic"
+    }
+}
+
+function modeTone(mode: ProjectStatus["mode"]): "success" | "warning" | "error" {
+    switch (mode) {
+        case "off":
+            return "error"
+        case "passive":
+        case "manual":
+            return "warning"
+        default:
+            return "success"
+    }
+}
+
+function modeDescription(project: ProjectStatus): string {
+    switch (project.mode) {
+        case "off":
+            return "DCP is disabled for this project."
+        case "passive":
+            return project.allowCompressTool
+                ? "Automatic nudges and cleanup are off. Compression runs when you ask for it."
+                : "Automatic nudges and cleanup are off. Compression needs the /dcp-compress trigger."
+        case "manual":
+            return "Automatic nudges are off; cleanup strategies still run."
+        default:
+            return "Automatic compression and cleanup are on."
+    }
+}
+
+function modeHint(project: ProjectStatus): string {
+    const source =
+        project.source === "project"
+            ? "project config"
+            : project.source === "config-dir"
+              ? "OpenCode config dir"
+              : project.source === "global"
+                ? "global DCP config"
+                : "DCP defaults"
+    const configPath =
+        project.source === "project"
+            ? project.projectConfigPath
+            : project.source === "config-dir"
+              ? project.configDirConfigPath
+              : project.source === "global"
+                ? project.globalConfigPath
+                : null
+    const location = configPath ? ` · ${configPath}` : ""
+    return `Source: ${source}${location} · new sessions after restart`
+}
+
+function projectSessionNotice(session: SessionReport | null, project: ProjectStatus): string {
+    if (!session) return ""
+    if (project.mode === "off") {
+        return "This session keeps its current mode until OpenCode restarts."
+    }
+    const override = sessionModeOverride(session, project)
+    if (override === "manual session") {
+        return "This session still uses manual mode; run /dcp manual off to apply now."
+    }
+    if (override === "automatic session") {
+        return "This session still runs automatically; run /dcp manual on to apply now."
+    }
+    return ""
+}
+
+function projectLabel(directory: string): string {
+    const trimmed = directory.replace(/[\\/]+$/, "")
+    const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"))
+    return index >= 0 ? trimmed.slice(index + 1) || trimmed : trimmed
+}
+
+function sessionModeOverride(
+    session: SessionReport | null,
+    project: ProjectStatus | null,
+): string {
+    if (!session || session.manualMode === null || !project) return ""
+    const projectManual = project.mode === "passive" || project.mode === "manual"
+    if (session.manualMode === projectManual) return ""
+    return session.manualMode ? "manual session" : "automatic session"
 }
 
 function renderNotice(): void {
@@ -270,6 +533,7 @@ function renderStatus(): void {
     if (!statusRefs) return
     const session = payload?.session ?? null
     const allTime = payload?.allTime ?? null
+    const mode = statusModeLabel(payload?.project ?? null)
 
     if (notice) {
         statusRefs.saved.textContent = "DCP"
@@ -280,7 +544,9 @@ function renderStatus(): void {
         statusRefs.saved.textContent = `~${formatTokens(session.tokensIn)} saved`
         statusRefs.ratio.hidden = false
         statusRefs.ratio.textContent = formatRatio(session.tokensIn, session.tokensOut)
-        const bits = [plural(session.blocks.length, "block")]
+        const bits: string[] = []
+        if (mode) bits.push(mode)
+        bits.push(plural(session.blocks.length, "block"))
         bits.push(plural(session.tools, "tool"))
         if (allTime) bits.push(`all-time ~${formatTokens(allTime.tokens)}`)
         statusRefs.sub.textContent = bits.join(" · ")
@@ -288,18 +554,26 @@ function renderStatus(): void {
     } else if (payload?.reason === "storage-missing") {
         statusRefs.saved.textContent = "DCP"
         statusRefs.ratio.hidden = true
-        statusRefs.sub.textContent = "DCP state folder not found"
+        statusRefs.sub.textContent = [mode, "DCP state folder not found"].filter(Boolean).join(" · ")
         statusRefs.sub.classList.add("dcp-status-error")
     } else {
         statusRefs.saved.textContent = "DCP"
         statusRefs.ratio.hidden = true
-        statusRefs.sub.textContent = sessionId
-            ? "No DCP state for this session yet"
-            : "No session open"
+        const bits = [mode]
+        bits.push(sessionId ? "No DCP state for this session yet" : "No session open")
+        statusRefs.sub.textContent = bits.filter(Boolean).join(" · ")
         statusRefs.sub.classList.remove("dcp-status-error")
     }
 
     syncStatusHeight()
+}
+
+function statusModeLabel(project: ProjectStatus | null): string {
+    if (!project) return ""
+    if (project.mode === "off") return "disabled"
+    if (project.mode === "passive") return "passive"
+    if (project.mode === "manual") return "manual"
+    return ""
 }
 
 function renderMetrics(container: HTMLElement, rows: MetricRow[]): void {
@@ -491,7 +765,15 @@ host.onReady((ctx: HostReadyContext) => {
         else mountPanel()
         startPolling()
     }
+    if (!directoryWired) {
+        directoryWired = true
+        host.onDirectory((directory) => {
+            applyDirectory(directory)
+        })
+    }
+    applyDirectory(ctx.directory)
     applySession(ctx.session)
+    render()
 })
 
 host.onSession((session) => {
