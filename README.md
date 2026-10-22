@@ -4,8 +4,8 @@ An OpenChamber extension that shows what
 [DCP RC](https://github.com/royalcat/opencode-dcp-rc) is saving you: the
 compression stats of the open session, the active compressions, and all-time
 totals — in the extensions rail panel and in the chat's Work Status panel. It
-also reports the project's DCP mode and can switch that project between
-automatic and passive compression.
+also reports the project's DCP mode and can switch that project between free
+and passive compression.
 
 ```
 Session                                  All-time
@@ -30,7 +30,8 @@ Block #12  8:1
 - OpenChamber **2.0.4** or newer (web or desktop; VS Code and mobile do not
   load extensions).
 - The [`@royalcat/opencode-dcp-rc`](https://github.com/royalcat/opencode-dcp-rc)
-  plugin installed in OpenCode (the extension reads its state files).
+  plugin **4.3.0** or newer installed in OpenCode (the extension reads its state
+  files and the `passiveMode` config key).
 
 ## Install
 
@@ -42,7 +43,7 @@ is available in the chat's Work Status panel section list.
 
 Git installs update themselves: bump `version` in `package.json`, rebuild, and
 push; OpenChamber offers the update the next time Settings → Extensions is
-opened. Add `#v0.2.0` or `#main` to the URL to pin a tag or branch.
+opened. Add `#v0.3.0` or `#main` to the URL to pin a tag or branch.
 
 To hack on the extension, add the absolute path of a checkout instead: a folder
 install runs straight from that folder and never updates on its own.
@@ -72,10 +73,11 @@ $OPENCODE_CONFIG_DIR/dcp-rc.jsonc|json   custom OpenCode config directory
 
 The **Make passive** button writes the project's `.opencode/dcp-rc.jsonc`
 (creating the file and directory when needed) with the plugin's passive recipe:
-`manualMode.enabled: true`, `automaticStrategies: false`, and
-`allowCompressTool: true`. **Enable automatic** writes the opposite values.
-Existing comments and unrelated keys are preserved with `jsonc-parser`.
-`enabled: false` is shown as **Off**, but the toggle does not write it.
+`enabled: true` and `passiveMode: true`. **Enable free mode** writes
+`passiveMode: false`. Existing comments and unrelated keys are preserved with
+`jsonc-parser`. `enabled: false` is shown as **Off**, but the toggle does not
+write it. DCP 4.3 ignores the old `manualMode` object, and so does the
+extension: a stale block is neither read nor removed.
 
 The service is a small Node process on `127.0.0.1` started by OpenChamber on
 first use; the panel reaches it only through the host's loopback proxy. Parsed
@@ -85,20 +87,19 @@ first request.
 ## Surfaces
 
 - **Rail panel** — the full report plus a Project section with the mode badge
-  (Automatic, Passive, Manual, Off), the config source, and the mode button.
-  Refreshed every four seconds while visible, on session change, and when a
-  turn finishes.
+  (Free, Passive, Off), the config source, and the mode button. Refreshed every
+  four seconds while visible, on session change, and when a turn finishes.
 - **Work Status section** — a compact card (saved tokens, ratio, block count,
   all-time total) that you can hide or move in the Work Status panel like the
-  built-in sections. It prefixes `passive`, `manual`, or `disabled` when the
-  project mode is not automatic.
+  built-in sections. It prefixes `passive` or `disabled` when the project mode
+  is not free.
 
 ## Limitations
 
-- DCP reads its config once at plugin startup, and each session persists its
-  own `/dcp manual` value. The mode button changes the project default for new
-  sessions after OpenCode restarts; an existing session keeps its persisted
-  override. The panel shows that override and which `/dcp manual` command
+- DCP reads its config once at plugin startup, and each session can persist its
+  own `/dcp passive` override. The mode button changes the project default for
+  new sessions after OpenCode restarts; an existing session keeps its persisted
+  override. The panel shows that override and which `/dcp passive` command
   applies the new project mode now, but it cannot invoke the plugin's RPC
   itself.
 - The context breakdown (system / user / assistant / tools) is computed from

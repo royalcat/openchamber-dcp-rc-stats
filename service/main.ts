@@ -103,8 +103,8 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
             }
             const directory = typeof body.directory === "string" ? body.directory : ""
             const mode = body.mode
-            if (mode !== "automatic" && mode !== "passive") {
-                throw new RequestError(400, "mode must be automatic or passive")
+            if (mode !== "free" && mode !== "passive") {
+                throw new RequestError(400, "mode must be free or passive")
             }
             const project = await projects.setMode(directory, mode)
             sendJson(res, 200, { ok: true, project })

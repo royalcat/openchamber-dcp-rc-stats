@@ -28,7 +28,7 @@ async function freePort() {
 
 const sessionId = "ses_smoke"
 const fixture = {
-    manualMode: false,
+    passiveMode: true,
     prune: {
         tools: { t1: 1 },
         messages: {
@@ -142,6 +142,7 @@ try {
     assert.equal(body.session.tokensOut, 400)
     assert.equal(body.session.tools, 2)
     assert.equal(body.session.messages, 1)
+    assert.equal(body.session.passiveModeOverride, true)
     assert.equal(body.session.blocks.length, 1)
     assert.equal(body.session.blocks[0].topic, "smoke")
     assert.equal(body.allTime.tokens, 1234)
@@ -154,8 +155,9 @@ try {
     )
     assert.equal(projectStats.status, 200)
     const projectBody = await projectStats.json()
-    assert.equal(projectBody.project.mode, "automatic")
+    assert.equal(projectBody.project.mode, "free")
     assert.equal(projectBody.project.source, "default")
+    assert.equal(projectBody.project.passiveMode, false)
 
     const toggle = await fetch(`${base}/project-mode`, {
         method: "POST",
@@ -175,8 +177,9 @@ try {
         path.join(projectDir, ".opencode", "dcp-rc.jsonc"),
         "utf-8",
     )
-    assert.match(configText, /"manualMode"/)
-    assert.match(configText, /"allowCompressTool": true/)
+    assert.match(configText, /"passiveMode": true/)
+    assert.doesNotMatch(configText, /"manualMode"/)
+    assert.doesNotMatch(configText, /"allowCompressTool"/)
 
     const refreshed = await fetch(
         `${base}/stats?session=${sessionId}&directory=${encodeURIComponent(projectDir)}`,

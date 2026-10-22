@@ -49,8 +49,11 @@ export interface SessionReport {
     found: true
     sessionName: string | null
     lastUpdated: string | null
-    /** Persisted `/dcp manual` override, or null before DCP has written state. */
-    manualMode: boolean | null
+    /**
+     * Persisted `/dcp passive` session override, or null when the session
+     * follows the config (including before DCP has written state).
+     */
+    passiveModeOverride: boolean | null
     tokensIn: number
     tokensOut: number
     durationMs: number
@@ -221,7 +224,7 @@ export function buildSessionReport(state: unknown, sessionId: string): SessionRe
         found: true,
         sessionName: typeof state.sessionName === "string" ? state.sessionName : null,
         lastUpdated: typeof state.lastUpdated === "string" ? state.lastUpdated : null,
-        manualMode: typeof state.manualMode === "boolean" ? state.manualMode : null,
+        passiveModeOverride: typeof state.passiveMode === "boolean" ? state.passiveMode : null,
         tokensIn: toCount(stats.totalPruneTokens),
         tokensOut,
         durationMs,

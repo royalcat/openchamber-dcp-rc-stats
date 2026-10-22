@@ -47,7 +47,7 @@ function block(overrides: Record<string, unknown> = {}) {
 
 function state(overrides: Record<string, unknown> = {}) {
     return {
-        manualMode: false,
+        passiveMode: false,
         prune: {
             tools: {},
             messages: {
@@ -153,7 +153,7 @@ test("buildSessionReport mirrors buildStatsReport", () => {
     assert.equal(report.id, "ses_test")
     assert.equal(report.sessionName, "my session")
     assert.equal(report.lastUpdated, "2026-10-01T00:00:00.000Z")
-    assert.equal(report.manualMode, false)
+    assert.equal(report.passiveModeOverride, false)
     assert.equal(report.tokensIn, 5000)
     assert.equal(report.tokensOut, 100) // only the active block
     assert.equal(report.durationMs, 500) // only the active block
@@ -175,6 +175,19 @@ test("buildSessionReport rejects unusable states", () => {
     assert.equal(buildSessionReport({ prune: {}, stats: {} }, "ses_x"), null)
     assert.equal(
         buildSessionReport({ prune: { tools: {} }, stats: {} }, "ses_x"),
+        null,
+    )
+})
+
+test("buildSessionReport reads a passiveMode override only when it is a boolean", () => {
+    const { passiveMode: _passiveMode, ...withoutOverride } = state()
+    assert.equal(buildSessionReport(withoutOverride, "ses_x")?.passiveModeOverride, null)
+    assert.equal(
+        buildSessionReport(state({ passiveMode: true }), "ses_x")?.passiveModeOverride,
+        true,
+    )
+    assert.equal(
+        buildSessionReport(state({ passiveMode: "yes" }), "ses_x")?.passiveModeOverride,
         null,
     )
 })

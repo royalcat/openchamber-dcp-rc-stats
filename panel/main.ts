@@ -146,7 +146,7 @@ function mountPanel(): void {
     projectSection.hidden = true
     projectSection.append(projectHeader, projectCard)
     const projectBadge = mountBadge(projectBadgeSlot, {
-        label: "Automatic",
+        label: "Free",
         tone: "success",
     })
 
@@ -298,10 +298,7 @@ function applyDirectory(directory: string | null): void {
 async function toggleProjectMode(): Promise<void> {
     if (!refs || !projectDirectory || projectBusy) return
     const project = payload?.project ?? null
-    const next =
-        project?.mode === "off" || project?.mode === "passive" || project?.mode === "manual"
-            ? "automatic"
-            : "passive"
+    const next = project?.mode === "free" ? "passive" : "free"
 
     projectNotice = null
     projectActionError = null
@@ -413,10 +410,7 @@ function renderProject(): void {
     refs.projectError.hidden = !error
     refs.projectError.textContent = error ?? ""
     refs.projectAction.update({
-        label:
-            project.mode === "automatic" || project.mode === "manual"
-                ? "Make passive"
-                : "Enable automatic",
+        label: project.mode === "free" ? "Make passive" : "Enable free mode",
         disabled: Boolean(project.projectConfigError) || projectBusy,
         loading: projectBusy,
     })
@@ -428,10 +422,8 @@ function modeLabel(mode: ProjectStatus["mode"]): string {
             return "Off"
         case "passive":
             return "Passive"
-        case "manual":
-            return "Manual"
         default:
-            return "Automatic"
+            return "Free"
     }
 }
 
@@ -440,7 +432,6 @@ function modeTone(mode: ProjectStatus["mode"]): "success" | "warning" | "error" 
         case "off":
             return "error"
         case "passive":
-        case "manual":
             return "warning"
         default:
             return "success"
@@ -452,13 +443,9 @@ function modeDescription(project: ProjectStatus): string {
         case "off":
             return "DCP is disabled for this project."
         case "passive":
-            return project.allowCompressTool
-                ? "Automatic nudges and cleanup are off. Compression runs when you ask for it."
-                : "Automatic nudges and cleanup are off. Compression needs the /dcp-compress trigger."
-        case "manual":
-            return "Automatic nudges are off; cleanup strategies still run."
+            return "Nudges are off. Compression stays available on request; cleanup follows the strategy settings."
         default:
-            return "Automatic compression and cleanup are on."
+            return "Nudges are on. Compression stays available; cleanup follows the strategy settings."
     }
 }
 
@@ -489,11 +476,11 @@ function projectSessionNotice(session: SessionReport | null, project: ProjectSta
         return "This session keeps its current mode until OpenCode restarts."
     }
     const override = sessionModeOverride(session, project)
-    if (override === "manual session") {
-        return "This session still uses manual mode; run /dcp manual off to apply now."
+    if (override === "passive session") {
+        return "This session is passive; run /dcp passive off (or /dcp passive reset) to use the project mode now."
     }
-    if (override === "automatic session") {
-        return "This session still runs automatically; run /dcp manual on to apply now."
+    if (override === "free session") {
+        return "This session runs free; run /dcp passive on (or /dcp passive reset) to use the project mode now."
     }
     return ""
 }
@@ -508,10 +495,11 @@ function sessionModeOverride(
     session: SessionReport | null,
     project: ProjectStatus | null,
 ): string {
-    if (!session || session.manualMode === null || !project) return ""
-    const projectManual = project.mode === "passive" || project.mode === "manual"
-    if (session.manualMode === projectManual) return ""
-    return session.manualMode ? "manual session" : "automatic session"
+    if (!session || session.passiveModeOverride === null || !project || project.mode === "off") {
+        return ""
+    }
+    if (session.passiveModeOverride === project.passiveMode) return ""
+    return session.passiveModeOverride ? "passive session" : "free session"
 }
 
 function renderNotice(): void {
@@ -572,7 +560,6 @@ function statusModeLabel(project: ProjectStatus | null): string {
     if (!project) return ""
     if (project.mode === "off") return "disabled"
     if (project.mode === "passive") return "passive"
-    if (project.mode === "manual") return "manual"
     return ""
 }
 

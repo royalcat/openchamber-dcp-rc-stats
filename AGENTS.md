@@ -7,8 +7,7 @@ An OpenChamber extension (guest package) that reads the state and config of
 shows its compression savings. It contributes:
 
 - a rail panel with session stats, active compressions, all-time totals, and a
-  **Project** section with the effective DCP mode and an automatic/passive
-  toggle;
+  **Project** section with the effective DCP mode and a free/passive toggle;
 - a compact section in the chat's Work Status panel;
 - a local Node service that reads DCP state/config files and writes the
   project's DCP config when the mode button is used.
@@ -52,7 +51,7 @@ uses `bunx openchamber-guest-bundle` from `@openchamber/sdk`.
 - `service/main.ts` — loopback HTTP service. Endpoints:
   - `GET /health` → `{ ok: true }`
   - `GET /stats?session=ID&directory=PATH` → `StatsPayload`
-  - `POST /project-mode` with `{ directory, mode: "automatic" | "passive" }`
+  - `POST /project-mode` with `{ directory, mode: "free" | "passive" }`
   - Every request, including `/health`, requires
     `Authorization: Bearer $OPENCHAMBER_SERVICE_TOKEN`.
 - `service/stats.ts` — DCP session/all-time aggregation. Mirrors the plugin's
@@ -76,7 +75,9 @@ Per-session DCP state:
 
 The service reproduces `/dcp stats`: tokens saved, summary size, ratio,
 compression time, pruned messages/tools, hidden summary-request usage, and
-all-time totals. State files are cached by mtime and size.
+all-time totals. State files are cached by mtime and size. The top-level
+`passiveMode` field is the session's `/dcp passive` override; when absent, the
+session follows the config.
 
 DCP config layers, lowest to highest precedence:
 
@@ -102,21 +103,24 @@ Test/development overrides read by the service:
 
 ## Project mode semantics
 
-The extension derives one of four modes:
+DCP 4.3 has three modes:
 
 - `Off` — `enabled: false`
-- `Passive` — `manualMode.enabled: true` and
-  `manualMode.automaticStrategies: false`
-- `Manual` — `manualMode.enabled: true` and
-  `manualMode.automaticStrategies: true`
-- `Automatic` — `manualMode.enabled` false
+- `Free` — `enabled: true` and `passiveMode: false` (default)
+- `Passive` — `enabled: true` and `passiveMode: true`
 
-The passive recipe writes:
-`manualMode.enabled: true`, `automaticStrategies: false`,
-`allowCompressTool: true`. Automatic writes the opposite values. If the
-effective config is disabled, the write also sets `enabled: true`.
-`enabled: false` is displayed as Off but the toggle deliberately does not write
-it.
+Passive suppresses every nudge; the compress tool stays available, and
+deduplication / error purging follow their own `strategies.*.enabled` settings
+in both Free and Passive.
+
+The passive recipe writes `enabled: true` and `passiveMode: true`; Free writes
+`passiveMode: false`. If the effective config is disabled, the write also sets
+`enabled: true`. `enabled: false` is displayed as Off but the toggle deliberately
+does not write it.
+
+DCP 4.3 replaced the old `manualMode` object with the top-level `passiveMode`
+key. A stale `manualMode` block is an unknown key to the plugin; the extension
+ignores it too and leaves it untouched.
 
 Writes go to the existing project `.jsonc`/`.json`, otherwise a new
 `.opencode/dcp-rc.jsonc` (creating `.opencode` if no ancestor has one). Use
@@ -129,13 +133,13 @@ the panel disables the button.
 1. **DCP caches config at plugin startup.** The button changes the project
    default for new sessions after OpenCode restarts. A running session keeps its
    current behavior.
-2. **Each session persists its own `/dcp manual` value.** On restart the
-   persisted session value overrides the project default. The panel detects the
-   mismatch, shows `manual session` / `automatic session` in the Session header,
-   and tells the user to run `/dcp manual off` or `/dcp manual on` to apply the
-   project mode to that session immediately. The extension cannot invoke DCP's
-   RPC or those commands.
-3. The service now **writes** the project config. This is a behavior change from
+2. **Each session can persist its own `/dcp passive` override.** The persisted
+   session value overrides the project default, including after a restart. The
+   panel detects the mismatch, shows `passive session` / `free session` in the
+   Session header, and tells the user to run `/dcp passive on|off` or
+   `/dcp passive reset` to apply the project mode to that session immediately.
+   The extension cannot invoke DCP's RPC or those commands.
+3. The service **writes** the project config. This is a behavior change from
    the original read-only extension and must stay documented in the README.
 4. A comments-only config file is how DCP writes its default global config.
    Treat it as empty, not as a parse error; `jsonc-parser` reports it as
@@ -146,8 +150,8 @@ the panel disables the button.
 - The rail panel mounts the Project section only when `ctx.directory` is known.
   `host.onDirectory` updates it on project changes; `onReady` supplies the
   initial directory.
-- The compact status surface has no button. It prefixes `passive`, `manual`, or
-  `disabled` in its subtitle so missing/stale stats are explained.
+- The compact status surface has no button. It prefixes `passive` or `disabled`
+  in its subtitle so missing/stale stats are explained.
 - After a successful mode write, the panel shows a toast and a persistent
   "new sessions use X mode after OpenCode restarts" notice.
 - `syncStatusHeight` calls `host.setHeight`; the Work Status contribution

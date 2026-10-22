@@ -1,7 +1,7 @@
 /**
  * DCP RC project configuration.
  *
- * Mirrors the config layers of `@royalcat/opencode-dcp-rc`
+ * Mirrors the config layers of `@royalcat/opencode-dcp-rc` 4.3+
  * (`lib/config.ts`):
  *
  *   global     `$XDG_CONFIG_HOME/opencode/dcp-rc.jsonc|json`
@@ -9,8 +9,12 @@
  *   project    nearest `.opencode/dcp-rc.jsonc|json` above the session dir
  *
  * The extension only needs the keys that decide whether the project runs DCP
- * automatically, passively, or not at all. The full plugin config is still
- * read by DCP itself; this module never rewrites unrelated keys or comments.
+ * freely, passively, or not at all. The full plugin config is still read by
+ * DCP itself; this module never rewrites unrelated keys or comments.
+ *
+ * DCP 4.3 replaced the old `manualMode` object with a top-level
+ * `passiveMode: boolean`. The plugin ignores a stale `manualMode` block, and so
+ * does this module.
  */
 
 import * as fs from "node:fs/promises"
@@ -19,18 +23,16 @@ import * as path from "node:path"
 import { applyEdits, modify, parse, printParseErrorCode } from "jsonc-parser/lib/esm/main.js"
 import type { ParseError } from "jsonc-parser/lib/esm/main.js"
 
-export type ProjectMode = "automatic" | "passive" | "manual" | "off"
+export type ProjectMode = "off" | "free" | "passive"
 export type ProjectModeSource = "project" | "config-dir" | "global" | "default"
-export type WritableProjectMode = "automatic" | "passive"
+export type WritableProjectMode = "free" | "passive"
 
 export interface ProjectStatus {
     directory: string
     mode: ProjectMode
     source: ProjectModeSource
     enabled: boolean
-    manualMode: boolean
-    automaticStrategies: boolean
-    allowCompressTool: boolean
+    passiveMode: boolean
     projectConfigPath: string | null
     globalConfigPath: string | null
     configDirConfigPath: string | null
@@ -56,16 +58,12 @@ export class ProjectConfigError extends Error {
 
 interface EffectiveConfig {
     enabled: boolean
-    manualMode: boolean
-    automaticStrategies: boolean
-    allowCompressTool: boolean
+    passiveMode: boolean
 }
 
 const DEFAULT_CONFIG: EffectiveConfig = {
     enabled: true,
-    manualMode: false,
-    automaticStrategies: true,
-    allowCompressTool: false,
+    passiveMode: false,
 }
 
 interface ConfigPaths {
@@ -222,35 +220,12 @@ function applyLayer(base: EffectiveConfig, data: Record<string, unknown>, filePa
         }
     }
 
-    if ("manualMode" in data) {
-        const manual = data.manualMode
-        if (!isRecord(manual)) {
-            errors.push(`${filePath}: manualMode must be an object`)
+    if ("passiveMode" in data) {
+        if (isBoolean(data.passiveMode)) {
+            config.passiveMode = data.passiveMode
+            touched = true
         } else {
-            if ("enabled" in manual) {
-                if (isBoolean(manual.enabled)) {
-                    config.manualMode = manual.enabled
-                    touched = true
-                } else {
-                    errors.push(`${filePath}: manualMode.enabled must be a boolean`)
-                }
-            }
-            if ("automaticStrategies" in manual) {
-                if (isBoolean(manual.automaticStrategies)) {
-                    config.automaticStrategies = manual.automaticStrategies
-                    touched = true
-                } else {
-                    errors.push(`${filePath}: manualMode.automaticStrategies must be a boolean`)
-                }
-            }
-            if ("allowCompressTool" in manual) {
-                if (isBoolean(manual.allowCompressTool)) {
-                    config.allowCompressTool = manual.allowCompressTool
-                    touched = true
-                } else {
-                    errors.push(`${filePath}: manualMode.allowCompressTool must be a boolean`)
-                }
-            }
+            errors.push(`${filePath}: passiveMode must be a boolean`)
         }
     }
 
@@ -259,8 +234,7 @@ function applyLayer(base: EffectiveConfig, data: Record<string, unknown>, filePa
 
 function deriveMode(config: EffectiveConfig): ProjectMode {
     if (!config.enabled) return "off"
-    if (!config.manualMode) return "automatic"
-    return config.automaticStrategies ? "manual" : "passive"
+    return config.passiveMode ? "passive" : "free"
 }
 
 function buildStatus(
@@ -276,9 +250,7 @@ function buildStatus(
         mode: deriveMode(config),
         source,
         enabled: config.enabled,
-        manualMode: config.manualMode,
-        automaticStrategies: config.automaticStrategies,
-        allowCompressTool: config.allowCompressTool,
+        passiveMode: config.passiveMode,
         projectConfigPath: paths.project,
         globalConfigPath: paths.global,
         configDirConfigPath: paths.configDir,
@@ -290,13 +262,9 @@ function buildStatus(
 function template(mode: WritableProjectMode): string {
     const passive = mode === "passive"
     return `{
-    // DCP Stats: ${passive ? "passive project (compression on request only)" : "automatic compression for this project"}.
+    // DCP Stats: ${passive ? "passive project (nudges off, compression on request)" : "free mode (compression tool and nudges on)"}.
     "enabled": true,
-    "manualMode": {
-        "enabled": ${passive},
-        "automaticStrategies": ${!passive},
-        "allowCompressTool": ${passive},
-    },
+    "passiveMode": ${passive},
 }
 `
 }
@@ -369,8 +337,8 @@ export class ProjectConfigStore {
     }
 
     async setMode(directoryInput: string, mode: WritableProjectMode): Promise<ProjectStatus> {
-        if (mode !== "automatic" && mode !== "passive") {
-            throw new ProjectConfigError("Project mode must be automatic or passive", "invalid-mode")
+        if (mode !== "free" && mode !== "passive") {
+            throw new ProjectConfigError("Project mode must be free or passive", "invalid-mode")
         }
 
         const status = await this.getStatus(directoryInput)
@@ -384,9 +352,7 @@ export class ProjectConfigStore {
         const target = await resolveWriteTarget(status.directory, status.projectConfigPath)
         const passive = mode === "passive"
         const changes: Array<{ path: string[]; value: boolean }> = [
-            { path: ["manualMode", "enabled"], value: passive },
-            { path: ["manualMode", "automaticStrategies"], value: !passive },
-            { path: ["manualMode", "allowCompressTool"], value: passive },
+            { path: ["passiveMode"], value: passive },
         ]
         if (!status.enabled) {
             changes.unshift({ path: ["enabled"], value: true })

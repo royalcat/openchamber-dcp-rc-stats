@@ -1377,9 +1377,7 @@ class ProjectConfigError extends Error {
 }
 var DEFAULT_CONFIG = {
   enabled: true,
-  manualMode: false,
-  automaticStrategies: true,
-  allowCompressTool: false
+  passiveMode: false
 };
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1490,35 +1488,12 @@ function applyLayer(base, data, filePath) {
       errors.push(`${filePath}: enabled must be a boolean`);
     }
   }
-  if ("manualMode" in data) {
-    const manual = data.manualMode;
-    if (!isRecord(manual)) {
-      errors.push(`${filePath}: manualMode must be an object`);
+  if ("passiveMode" in data) {
+    if (isBoolean(data.passiveMode)) {
+      config.passiveMode = data.passiveMode;
+      touched = true;
     } else {
-      if ("enabled" in manual) {
-        if (isBoolean(manual.enabled)) {
-          config.manualMode = manual.enabled;
-          touched = true;
-        } else {
-          errors.push(`${filePath}: manualMode.enabled must be a boolean`);
-        }
-      }
-      if ("automaticStrategies" in manual) {
-        if (isBoolean(manual.automaticStrategies)) {
-          config.automaticStrategies = manual.automaticStrategies;
-          touched = true;
-        } else {
-          errors.push(`${filePath}: manualMode.automaticStrategies must be a boolean`);
-        }
-      }
-      if ("allowCompressTool" in manual) {
-        if (isBoolean(manual.allowCompressTool)) {
-          config.allowCompressTool = manual.allowCompressTool;
-          touched = true;
-        } else {
-          errors.push(`${filePath}: manualMode.allowCompressTool must be a boolean`);
-        }
-      }
+      errors.push(`${filePath}: passiveMode must be a boolean`);
     }
   }
   return { config, touched, errors };
@@ -1526,9 +1501,7 @@ function applyLayer(base, data, filePath) {
 function deriveMode(config) {
   if (!config.enabled)
     return "off";
-  if (!config.manualMode)
-    return "automatic";
-  return config.automaticStrategies ? "manual" : "passive";
+  return config.passiveMode ? "passive" : "free";
 }
 function buildStatus(directory, paths, config, source, errors, projectConfigError) {
   return {
@@ -1536,9 +1509,7 @@ function buildStatus(directory, paths, config, source, errors, projectConfigErro
     mode: deriveMode(config),
     source,
     enabled: config.enabled,
-    manualMode: config.manualMode,
-    automaticStrategies: config.automaticStrategies,
-    allowCompressTool: config.allowCompressTool,
+    passiveMode: config.passiveMode,
     projectConfigPath: paths.project,
     globalConfigPath: paths.global,
     configDirConfigPath: paths.configDir,
@@ -1550,13 +1521,9 @@ function buildStatus(directory, paths, config, source, errors, projectConfigErro
 function template(mode) {
   const passive = mode === "passive";
   return `{
-    // DCP Stats: ${passive ? "passive project (compression on request only)" : "automatic compression for this project"}.
+    // DCP Stats: ${passive ? "passive project (nudges off, compression on request)" : "free mode (compression tool and nudges on)"}.
     "enabled": true,
-    "manualMode": {
-        "enabled": ${passive},
-        "automaticStrategies": ${!passive},
-        "allowCompressTool": ${passive},
-    },
+    "passiveMode": ${passive},
 }
 `;
 }
@@ -1622,8 +1589,8 @@ class ProjectConfigStore {
     return buildStatus(directory, paths, config, source, errors, projectConfigError);
   }
   async setMode(directoryInput, mode) {
-    if (mode !== "automatic" && mode !== "passive") {
-      throw new ProjectConfigError("Project mode must be automatic or passive", "invalid-mode");
+    if (mode !== "free" && mode !== "passive") {
+      throw new ProjectConfigError("Project mode must be free or passive", "invalid-mode");
     }
     const status = await this.getStatus(directoryInput);
     if (status.projectConfigError) {
@@ -1632,9 +1599,7 @@ class ProjectConfigStore {
     const target = await resolveWriteTarget(status.directory, status.projectConfigPath);
     const passive = mode === "passive";
     const changes = [
-      { path: ["manualMode", "enabled"], value: passive },
-      { path: ["manualMode", "automaticStrategies"], value: !passive },
-      { path: ["manualMode", "allowCompressTool"], value: passive }
+      { path: ["passiveMode"], value: passive }
     ];
     if (!status.enabled) {
       changes.unshift({ path: ["enabled"], value: true });
@@ -1798,7 +1763,7 @@ function buildSessionReport(state, sessionId) {
     found: true,
     sessionName: typeof state.sessionName === "string" ? state.sessionName : null,
     lastUpdated: typeof state.lastUpdated === "string" ? state.lastUpdated : null,
-    manualMode: typeof state.manualMode === "boolean" ? state.manualMode : null,
+    passiveModeOverride: typeof state.passiveMode === "boolean" ? state.passiveMode : null,
     tokensIn: toCount(stats.totalPruneTokens),
     tokensOut,
     durationMs,
@@ -2017,8 +1982,8 @@ var server = http.createServer(async (req, res) => {
       }
       const directory = typeof body.directory === "string" ? body.directory : "";
       const mode = body.mode;
-      if (mode !== "automatic" && mode !== "passive") {
-        throw new RequestError(400, "mode must be automatic or passive");
+      if (mode !== "free" && mode !== "passive") {
+        throw new RequestError(400, "mode must be free or passive");
       }
       const project = await projects.setMode(directory, mode);
       sendJson(res, 200, { ok: true, project });

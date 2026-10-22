@@ -30,20 +30,12 @@ async function write(filePath: string, content: string): Promise<void> {
 
 const passive = `{
     // passive project
-    "manualMode": {
-        "enabled": true,
-        "automaticStrategies": false,
-        "allowCompressTool": true,
-    },
+    "passiveMode": true,
 }
 `
 
-const automatic = `{
-    "manualMode": {
-        "enabled": false,
-        "automaticStrategies": true,
-        "allowCompressTool": false,
-    },
+const free = `{
+    "passiveMode": false,
 }
 `
 
@@ -62,18 +54,16 @@ test("findOpencodeDir finds the nearest .opencode above the directory", async (t
     assert.equal(await findOpencodeDir(nested), path.join(project, ".opencode"))
 })
 
-test("defaults to automatic with no config files", async (t) => {
+test("defaults to free with no config files", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     await fs.mkdir(project, { recursive: true })
 
     const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
-    assert.equal(status.mode, "automatic")
+    assert.equal(status.mode, "free")
     assert.equal(status.source, "default")
     assert.equal(status.enabled, true)
-    assert.equal(status.manualMode, false)
-    assert.equal(status.automaticStrategies, true)
-    assert.equal(status.allowCompressTool, false)
+    assert.equal(status.passiveMode, false)
     assert.equal(status.projectConfigPath, null)
     assert.equal(status.globalConfigPath, null)
     assert.equal(status.error, undefined)
@@ -92,13 +82,13 @@ test("comments-only config files are treated as empty", async (t) => {
     await write(path.join(project, ".opencode", "dcp-rc.jsonc"), "// no project settings\n")
 
     const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
-    assert.equal(status.mode, "automatic")
+    assert.equal(status.mode, "free")
     assert.equal(status.source, "default")
     assert.equal(status.error, undefined)
     assert.equal(status.projectConfigError, undefined)
 })
 
-test("reads the passive project recipe", async (t) => {
+test("reads the passive project config", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     const configPath = path.join(project, ".opencode", "dcp-rc.jsonc")
@@ -107,9 +97,7 @@ test("reads the passive project recipe", async (t) => {
     const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
     assert.equal(status.mode, "passive")
     assert.equal(status.source, "project")
-    assert.equal(status.manualMode, true)
-    assert.equal(status.automaticStrategies, false)
-    assert.equal(status.allowCompressTool, true)
+    assert.equal(status.passiveMode, true)
     assert.equal(status.projectConfigPath, configPath)
 })
 
@@ -117,12 +105,12 @@ test("project layers override global layers", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     await write(path.join(root, "global", "dcp-rc.jsonc"), passive)
-    await write(path.join(project, ".opencode", "dcp-rc.jsonc"), automatic)
+    await write(path.join(project, ".opencode", "dcp-rc.jsonc"), free)
 
     const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
-    assert.equal(status.mode, "automatic")
+    assert.equal(status.mode, "free")
     assert.equal(status.source, "project")
-    assert.equal(status.manualMode, false)
+    assert.equal(status.passiveMode, false)
 })
 
 test("enabled false reports off", async (t) => {
@@ -132,6 +120,23 @@ test("enabled false reports off", async (t) => {
         path.join(project, ".opencode", "dcp-rc.jsonc"),
         `{
             "enabled": false,
+            "passiveMode": true,
+        }
+`,
+    )
+
+    const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
+    assert.equal(status.mode, "off")
+    assert.equal(status.enabled, false)
+    assert.equal(status.passiveMode, true)
+})
+
+test("a stale manualMode block has no effect", async (t) => {
+    const root = await tempRoot(t)
+    const project = path.join(root, "project")
+    await write(
+        path.join(project, ".opencode", "dcp-rc.jsonc"),
+        `{
             "manualMode": {
                 "enabled": true,
                 "automaticStrategies": false,
@@ -142,39 +147,22 @@ test("enabled false reports off", async (t) => {
     )
 
     const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
-    assert.equal(status.mode, "off")
-    assert.equal(status.enabled, false)
-})
-
-test("manual mode with strategies reports manual", async (t) => {
-    const root = await tempRoot(t)
-    const project = path.join(root, "project")
-    await write(
-        path.join(project, ".opencode", "dcp-rc.jsonc"),
-        `{
-            "manualMode": {
-                "enabled": true,
-                "automaticStrategies": true,
-            },
-        }
-`,
-    )
-
-    const status = await new ProjectConfigStore(envFor(root)).getStatus(project)
-    assert.equal(status.mode, "manual")
-    assert.equal(status.automaticStrategies, true)
+    assert.equal(status.mode, "free")
+    assert.equal(status.passiveMode, false)
+    assert.equal(status.error, undefined)
+    assert.equal(status.projectConfigError, undefined)
 })
 
 test("invalid project JSONC is reported and never rewritten", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     const configPath = path.join(project, ".opencode", "dcp-rc.jsonc")
-    const broken = `{ "manualMode": { "enabled": true, `
+    const broken = `{ "passiveMode": true, `
     await write(configPath, broken)
 
     const store = new ProjectConfigStore(envFor(root))
     const status = await store.getStatus(project)
-    assert.equal(status.mode, "automatic")
+    assert.equal(status.mode, "free")
     assert.ok(status.projectConfigError)
     assert.ok(status.error)
 
@@ -185,7 +173,27 @@ test("invalid project JSONC is reported and never rewritten", async (t) => {
     assert.equal(await fs.readFile(configPath, "utf-8"), broken)
 })
 
-test("setMode writes the passive recipe and preserves comments and other keys", async (t) => {
+test("a malformed passiveMode type is reported and blocks writes", async (t) => {
+    const root = await tempRoot(t)
+    const project = path.join(root, "project")
+    const configPath = path.join(project, ".opencode", "dcp-rc.jsonc")
+    const broken = `{ "passiveMode": "yes" }\n`
+    await write(configPath, broken)
+
+    const store = new ProjectConfigStore(envFor(root))
+    const status = await store.getStatus(project)
+    assert.equal(status.mode, "free")
+    assert.match(status.error ?? "", /passiveMode must be a boolean/)
+    assert.ok(status.projectConfigError)
+
+    await assert.rejects(
+        () => store.setMode(project, "passive"),
+        (error: unknown) => error instanceof ProjectConfigError && error.code === "invalid-config",
+    )
+    assert.equal(await fs.readFile(configPath, "utf-8"), broken)
+})
+
+test("setMode writes the passive config and preserves comments and other keys", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     const configPath = path.join(project, ".opencode", "dcp-rc.jsonc")
@@ -194,10 +202,7 @@ test("setMode writes the passive recipe and preserves comments and other keys", 
         `{
     // keep this
     "debug": true,
-    "manualMode": {
-        "enabled": false, // turn on later
-        "automaticStrategies": true,
-    },
+    "passiveMode": false, // turn on later
 }
 `,
     )
@@ -209,9 +214,8 @@ test("setMode writes the passive recipe and preserves comments and other keys", 
     const text = await fs.readFile(configPath, "utf-8")
     assert.match(text, /keep this/)
     assert.match(text, /"debug": true/)
-    assert.match(text, /"enabled": true/)
-    assert.match(text, /"automaticStrategies": false/)
-    assert.match(text, /"allowCompressTool": true/)
+    assert.match(text, /"passiveMode": true/)
+    assert.doesNotMatch(text, /"manualMode"/)
 })
 
 test("setMode creates .opencode/dcp-rc.jsonc when no config exists", async (t) => {
@@ -225,38 +229,49 @@ test("setMode creates .opencode/dcp-rc.jsonc when no config exists", async (t) =
 
     const text = await fs.readFile(path.join(project, ".opencode", "dcp-rc.jsonc"), "utf-8")
     assert.match(text, /"enabled": true/)
-    assert.match(text, /"manualMode"/)
-    assert.match(text, /"allowCompressTool": true/)
+    assert.match(text, /"passiveMode": true/)
+    assert.doesNotMatch(text, /"manualMode"/)
 })
 
-test("setMode toggles back to automatic", async (t) => {
+test("setMode toggles back to free", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     const configPath = path.join(project, ".opencode", "dcp-rc.jsonc")
     await write(configPath, passive)
 
-    const status = await new ProjectConfigStore(envFor(root)).setMode(project, "automatic")
-    assert.equal(status.mode, "automatic")
+    const status = await new ProjectConfigStore(envFor(root)).setMode(project, "free")
+    assert.equal(status.mode, "free")
 
     const text = await fs.readFile(configPath, "utf-8")
-    assert.match(text, /"manualMode"/)
-    assert.match(text, /"enabled": false/)
-    assert.match(text, /"automaticStrategies": true/)
-    assert.match(text, /"allowCompressTool": false/)
+    assert.match(text, /"passiveMode": false/)
+})
+
+test("setMode re-enables a disabled project", async (t) => {
+    const root = await tempRoot(t)
+    const project = path.join(root, "project")
+    const configPath = path.join(project, ".opencode", "dcp-rc.jsonc")
+    await write(configPath, `{ "enabled": false, "passiveMode": true }\n`)
+
+    const status = await new ProjectConfigStore(envFor(root)).setMode(project, "passive")
+    assert.equal(status.mode, "passive")
+    assert.equal(status.enabled, true)
+
+    const text = await fs.readFile(configPath, "utf-8")
+    assert.match(text, /"enabled": true/)
+    assert.match(text, /"passiveMode": true/)
 })
 
 test("setMode edits an existing dcp-rc.json instead of creating a jsonc", async (t) => {
     const root = await tempRoot(t)
     const project = path.join(root, "project")
     const jsonPath = path.join(project, ".opencode", "dcp-rc.json")
-    await write(jsonPath, automatic)
+    await write(jsonPath, free)
 
     const status = await new ProjectConfigStore(envFor(root)).setMode(project, "passive")
     assert.equal(status.mode, "passive")
-    assert.equal(await fs.readFile(jsonPath, "utf-8").then(() => true), true)
 
     const text = await fs.readFile(jsonPath, "utf-8")
-    assert.match(text, /"manualMode"/)
+    assert.match(text, /"passiveMode": true/)
     await assert.rejects(() => fs.stat(path.join(project, ".opencode", "dcp-rc.jsonc")))
 })
 
@@ -277,7 +292,7 @@ test("resolveConfigPaths honours OPENCODE_CONFIG_DIR", async (t) => {
     const project = path.join(root, "project")
     const configDir = path.join(root, "config-dir")
     await fs.mkdir(project, { recursive: true })
-    await write(path.join(configDir, "dcp-rc.jsonc"), automatic)
+    await write(path.join(configDir, "dcp-rc.jsonc"), free)
 
     const paths = await resolveConfigPaths(project, {
         ...envFor(root),
@@ -295,7 +310,7 @@ test("setMode rejects relative directories and unknown modes", async (t) => {
         (error: unknown) => error instanceof ProjectConfigError && error.code === "invalid-directory",
     )
     await assert.rejects(
-        () => store.setMode(root, "off" as "automatic"),
+        () => store.setMode(root, "off" as "free"),
         (error: unknown) => error instanceof ProjectConfigError && error.code === "invalid-mode",
     )
 })
